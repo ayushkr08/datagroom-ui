@@ -39,6 +39,7 @@ import markdownItMermaid from "@datatraccorporation/markdown-it-mermaid";
 import { dsService } from '../../services';
 import AddColumnForm from './addColumnForm.js';
 import { authHeader } from '../../helpers';
+import Plotly from 'plotly.js';
 let MarkdownIt = new require('markdown-it')({
     linkify: true,
     html: true
@@ -61,6 +62,20 @@ MarkdownIt.renderer.rules.link_open = function (tokens, idx, options, env, self)
   
     // pass token to default renderer.
     return defaultRender(tokens, idx, options, env, self);
+};
+
+
+// Custom rule to handle ```plotly blocks
+MarkdownIt.renderer.rules.fence = function (tokens, idx) {
+    console.log("Debug : ", tokens, idx);
+
+    const token = tokens[idx];
+    if (token.info === "plotly" && token.content) {
+        const encoded = encodeURIComponent(token.content);
+        const id = `plotly-graph-${idx}`;
+        return `<div id=${id} class="plotly-graph" data-plot='${encoded}'></div>`;
+    }
+    return `<pre><code>${MarkdownIt.utils.escapeHtml(token.content)}</code></pre>`;
 };
 
 const config = {};
@@ -254,6 +269,7 @@ class DsView extends Component {
         this.fillLocalStorageItemData = this.fillLocalStorageItemData.bind(this)
         this.addJiraRow = this.addJiraRow.bind(this)
         this.formFinalJiraFormData = this.formFinalJiraFormData.bind(this)
+        this.renderPlotlyInCells = this.renderPlotlyInCells.bind(this)
 
         this.showNotificationTimeInMs = 2000; // by default show notification alert for 2 seconds.
     }
@@ -378,6 +394,7 @@ class DsView extends Component {
                         me.ref.table.rowManager.adjustTableSize(false);
                         me.normalizeAllImgRows();
                         me.applyHighlightJsBadge();
+                        me.renderPlotlyInCells();
                     } else {
                         console.log("Skipping adjusttablesie (unlockReq)... ");
                     }
@@ -487,6 +504,8 @@ class DsView extends Component {
         this.normalizeAllImgRows();
         // add HighlightJS-badge
         this.applyHighlightJsBadge();
+        // Render plot in cellss;
+        this.renderPlotlyInCells();
     }
 
     // Since we generate html after editing, we need to attach
@@ -533,6 +552,19 @@ class DsView extends Component {
             window.highlightJsBadge();
             this.applyHtmlLinkAndBadgeClickHandlers();
         }, 1000);
+    }
+
+    renderPlotlyInCells() {
+        const plots = document.querySelectorAll('.plotly-graph');
+        plots.forEach((div) => {
+            const data = div.getAttribute('data-plot');
+            try {
+                const json = JSON.parse(decodeURIComponent(data));
+                Plotly.newPlot(div, json.data, json.layout || {});
+            } catch (e) {
+                div.innerHTML = `<div style="color:red;">Invalid Plotly JSON</div>`;
+            }
+        })
     }
 
     fixImgSizeForClipboard(output) {
@@ -791,6 +823,7 @@ class DsView extends Component {
                 this.ref.table.rowManager.adjustTableSize(false);
                 this.normalizeAllImgRows();
                 this.applyHighlightJsBadge();
+                this.renderPlotlyInCells();
             } else {
                 console.log("Skipping adjusttablesize (cellEditCancelled)...");
             }
@@ -1395,6 +1428,7 @@ class DsView extends Component {
             this.ref.table.rowManager.adjustTableSize(false);
             this.normalizeAllImgRows();
             this.applyHighlightJsBadge();
+            this.renderPlotlyInCells();
         }, 500);
 
         //This maybe too expensive? Not good because it loses scrolling position
